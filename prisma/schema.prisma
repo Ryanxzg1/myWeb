@@ -1,0 +1,155 @@
+// Prisma 7 — skema data (PRD bagian 8)
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum PublishStatus {
+  draft
+  published
+}
+
+/// Akun admin tunggal.
+model User {
+  id           String      @id @default(cuid())
+  email        String      @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  loginCodes   LoginCode[]
+
+  @@map("users")
+}
+
+/// Kode sekali pakai untuk login (OTP email). Bersihkan via expiresAt.
+model LoginCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  expiresAt DateTime
+  attempts  Int       @default(0)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([expiresAt])
+  @@map("login_codes")
+}
+
+/// Pengaturan umum situs (satu baris, id tetap "singleton").
+model SiteSettings {
+  id                     String   @id @default("singleton")
+  siteName               String
+  tagline                Json
+  githubUrl              String?
+  linkedinUrl            String?
+  publicEmail            String?
+  blogUrl                String?
+  cvIdPath               String?
+  cvEnPath               String?
+  ogImage                String?
+  defaultMetaTitle       Json
+  defaultMetaDescription Json
+  analyticsEnabled       Boolean  @default(false)
+  updatedAt              DateTime @updatedAt
+
+  @@map("site_settings")
+}
+
+/// Profil pemilik (satu baris, id tetap "singleton").
+model Profile {
+  id          String   @id @default("singleton")
+  name        String
+  headline    Json
+  subheadline Json
+  about       Json
+  avatar      String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("profiles")
+}
+
+model Experience {
+  id          String        @id @default(cuid())
+  company     String
+  role        Json
+  description Json
+  location    String?
+  startedAt   DateTime
+  endedAt     DateTime?
+  current     Boolean       @default(false)
+  status      PublishStatus @default(draft)
+  publishedAt DateTime?
+  sortOrder   Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, sortOrder])
+  @@map("experiences")
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       Json
+  summary     Json
+  description Json
+  techStack   String[]
+  demoUrl     String?
+  repoUrl     String?
+  cover       String?
+  gallery     Json
+  isFeatured  Boolean       @default(false)
+  status      PublishStatus @default(draft)
+  publishedAt DateTime?
+  sortOrder   Int           @default(0)
+  meta        Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, sortOrder])
+  @@map("projects")
+}
+
+model Skill {
+  id        String @id @default(cuid())
+  name      String
+  group     String
+  sortOrder Int    @default(0)
+
+  @@index([group, sortOrder])
+  @@map("skills")
+}
+
+model ContactMessage {
+  id        String    @id @default(cuid())
+  name      String
+  email     String
+  subject   String?
+  message   String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([readAt, createdAt])
+  @@map("contact_messages")
+}
+
+/// Metadata aset Cloudinary; alt text per bahasa.
+model Media {
+  id        String   @id @default(cuid())
+  publicId  String   @unique
+  url       String
+  width     Int?
+  height    Int?
+  alt       Json
+  createdAt DateTime @default(now())
+
+  @@map("media")
+}
