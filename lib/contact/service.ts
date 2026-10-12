@@ -57,9 +57,20 @@ export async function verifyTurnstileToken(token: string, remoteIp?: string): Pr
   }
 }
 
+export type ContactErrorCode =
+  | "RATE_LIMITED"
+  | "VALIDATION_ERROR"
+  | "TURNSTILE_FAILED";
+
 export type SubmitContactResult =
   | { success: true; messageId: string }
-  | { success: false; error: string; fieldErrors?: Record<string, string[]> };
+  | {
+      success: false;
+      errorCode: ContactErrorCode;
+      error: string;
+      fieldErrors?: Record<string, string[]>;
+      retryAfterSeconds?: number;
+    };
 
 /**
  * Memproses penyimpanan pesan kontak dengan proteksi spam berlapis (FR-CON-1 s/d FR-CON-6).
@@ -74,7 +85,12 @@ export async function submitContactMessage(
   if (!rateLimit.allowed) {
     return {
       success: false,
+      errorCode: "RATE_LIMITED",
       error: "Terlalu banyak permintaan pengiriman pesan. Silakan coba lagi nanti.",
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((rateLimit.resetAt - Date.now()) / 1000),
+      ),
     };
   }
 
@@ -83,6 +99,7 @@ export async function submitContactMessage(
     const flattened = parsed.error.flatten().fieldErrors;
     return {
       success: false,
+      errorCode: "VALIDATION_ERROR",
       error: "Data yang dimasukkan tidak valid",
       fieldErrors: flattened,
     };
@@ -101,6 +118,7 @@ export async function submitContactMessage(
   if (!isTurnstileValid) {
     return {
       success: false,
+      errorCode: "TURNSTILE_FAILED",
       error: "Verifikasi anti-spam gagal. Silakan coba lagi.",
     };
   }
@@ -115,15 +133,23 @@ export async function submitContactMessage(
     },
   });
 
-  // Notifikasi email asinkron (kegagalan email tidak menggagalkan penyimpanan di DB)
-  sendContactNotification({
-    name,
-    email,
-    subject,
-    message,
-  }).catch((err) => {
-    console.error("[CONTACT NOTIFICATION BACKGROUND ERROR]", err);
-  });
+  // Notifikasi email sinkron sesuai PRD FR-CON-4. Di serverless, promise tanpa await
+  // berisiko di-terminate sebelum selesai sehingga notifikasi hilang.
+  // Kegagalan email TIDAK menggagalkan penyimpanan pesan — hanya di-log dengan konteks.
+  try {
+    await sendContactNotification({
+      name,
+      email,
+      subject,
+      message,
+    });
+  } catch (err) {
+    console.error("[CONTACT NOTIFICATION ERROR]", {
+      messageId: saved.id,
+      email,
+      err,
+    });
+  }
 
   return { success: true, messageId: saved.id };
 }

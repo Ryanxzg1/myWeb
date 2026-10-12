@@ -19,6 +19,7 @@ Website personal (portofolio) dwibahasa ID/EN untuk memperkenalkan pemilik: prof
 | [`docs/adr/0001-stack-nextjs-vercel.md`](./docs/adr/0001-stack-nextjs-vercel.md) | Keputusan arsitektur: kenapa Next.js + Vercel + Neon + Cloudinary + Resend | Saat mempertanyakan pilihan stack |
 | [`docs/ui-ux-prompt.md`](./docs/ui-ux-prompt.md) | Playbook prompt UX Pilot + urutan pakai + checklist evaluasi | Saat generate/refine desain |
 | [`docs/design-review.md`](./docs/design-review.md) | Temuan QC desain terhadap 7 artboard + status perbaikan | Saat mulai implementasi UI |
+| [`docs/qe-remediation.md`](./docs/qe-remediation.md) | Temuan QE Fase 4 + akar masalah + perbaikan + lesson learned | Sebelum mengubah route handler / rate limit |
 | `docs/generated-uiux/*.png` | 7 artboard hasil UX Pilot (01-home … 07-admin-inbox) | Saat implementasi komponen |
 | `AGENTS.md` | Blok aturan Next.js — **dikelola ulang oleh `next dev`**, jangan diedit manual | — |
 
@@ -58,7 +59,7 @@ Alasan pemilihan ada di ADR-0001.
 | Fase 1 | Scaffold Next.js + wiring Prisma/Vercel/Cloudinary/Resend + token tema | ✅ selesai |
 | Fase 2 | Skema Prisma (9 tabel) + SQL migrasi + seed | ✅ selesai |
 | Fase 3 | Service logic: auth/OTP, session, email, kontak, rate limit, sanitasi | ✅ selesai |
-| Fase 4 | API Route Handlers (`/api/auth/*`, `/api/contact`) | ⬜ belum |
+| Fase 4 | API Route Handlers (`/api/auth/*`, `/api/contact`) | ✅ selesai |
 | Fase 5 | i18n routing (`[locale]`) + wiring `next-themes` | ⬜ belum |
 | Fase 6 | Implementasi UI publik & admin sesuai artboard | ⬜ belum |
 
@@ -68,7 +69,7 @@ Alasan pemilihan ada di ADR-0001.
 
 ## 5. Verifikasi Terakhir
 
-- `npm test` → 6 suite, 22 test lulus
+- `npm test` → 9 suite, 44 test lulus
 - `npm run typecheck` → 0 error
 - `npm run build` → sukses
 
@@ -82,18 +83,24 @@ Jalankan ketiganya sebelum menandai pekerjaan selesai.
 app/
   [locale]/                 # publik (belum diisi)
   admin/                    # panel admin (belum diisi)
-  api/                      # route handlers (belum diisi)
+  api/
+    auth/login/route.ts     # POST login step 1 (kredensial + kirim OTP)
+    auth/verify/route.ts    # POST login step 2 (verifikasi OTP + cookie session)
+    auth/logout/route.ts    # POST logout (clear cookie session)
+    contact/route.ts        # POST pesan kontak (Turnstile + honeypot + rate limit)
   globals.css               # token tema
 lib/
   db.ts                     # Prisma client singleton + adapter pg
   types.ts                  # Locale, Localized
   auth/password.ts          # hash/verify scrypt (stdlib)
+  auth/temp-token.ts        # temporary HMAC token Step 1 -> Step 2 + maskEmail
   auth/session.ts           # signed session token HMAC-SHA256
   auth/service.ts           # kredensial, OTP, rate limit login
   email/resend.ts           # OTP + notifikasi kontak (escape HTML)
   contact/service.ts        # validasi zod, Turnstile, honeypot, simpan, rate limit
   content/sanitizer.ts      # sanitasi rich text + revalidateTag
   security/rate-limit.ts    # sliding window + hash IP
+  security/ip.ts            # ekstraksi IP klien terpusat (x-real-ip prioritas)
   generated/prisma/         # hasil `prisma generate` (gitignored)
 prisma/
   schema.prisma             # 9 model
@@ -126,6 +133,10 @@ Aturan ini spesifik untuk versi yang terpasang — berbeda dari Next.js/Prisma p
 - Variabel yang dipakai di browser harus berprefix `NEXT_PUBLIC_` (contoh: `NEXT_PUBLIC_TURNSTILE_SITE_KEY`).
 - Semua input pengunjung yang masuk ke email HTML harus lewat `escapeHtml`.
 - Rich text dari admin harus lewat `sanitizeRichText` sebelum disimpan.
+- **Dilarang floating promise di route handler.** Semua I/O (email, DB cleanup) wajib `await`-ed di dalam `try/catch`, meski kegagalannya tidak fatal — serverless bisa terminate sebelum promise selesai.
+- Ekstraksi IP klien wajib lewat `lib/security/ip.ts`, bukan baca header `x-forwarded-for` langsung.
+- Rate limiter wajib punya namespace key per alur (mis. `login:` vs `verify:`), jangan berbagi pool.
+- Status HTTP error ditentukan dari `errorCode` machine-readable, bukan dari pencocokan string pesan error.
 
 ---
 
@@ -157,7 +168,6 @@ Catatan dev: jika `RESEND_API_KEY` kosong, kode OTP dicetak ke terminal, bukan d
 
 ## 10. Langkah Berikutnya
 
-1. **Fase 4** — Route Handlers: `/api/auth/login`, `/api/auth/verify`, `/api/auth/logout`, `/api/contact`.
-2. **Fase 5** — Routing `[locale]` (next-intl) + wiring `next-themes` (no-flash).
-3. **Fase 6** — Implementasi UI publik & admin mengikuti `docs/generated-uiux/`, dengan temuan di `docs/design-review.md` sebagai catatan yang belum diperbaiki.
-4. Isi kredensial asli (Neon, Cloudinary, Resend, Turnstile) lalu `db:migrate` + `db:seed`.
+1. **Fase 5** — Routing `[locale]` (next-intl) + wiring `next-themes` (no-flash) + proxy auth middleware.
+2. **Fase 6** — Implementasi UI publik & admin mengikuti `docs/generated-uiux/`, dengan temuan di `docs/design-review.md` sebagai catatan yang belum diperbaiki.
+3. Isi kredensial asli (Neon, Cloudinary, Resend, Turnstile) lalu `db:migrate` + `db:seed`.

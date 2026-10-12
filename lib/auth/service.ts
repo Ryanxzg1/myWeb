@@ -11,9 +11,19 @@ export const MAX_OTP_ATTEMPTS = 5; // batas percobaan gagal sebelum dikunci (FR-
 export const LOGIN_RATE_LIMIT = 5;
 export const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
+// Kuota verifikasi OTP terpisah agar tidak saling mengikis dengan login kredensial (QE-02).
+// Brute-force OTP sudah dibatasi di level database (MAX_OTP_ATTEMPTS), jadi kuota IP lebih longgar.
+export const VERIFY_RATE_LIMIT = 10;
+export const VERIFY_WINDOW_MS = 15 * 60 * 1000;
+
 export function checkLoginRateLimit(rawIp: string) {
   const key = `login:${hashClientIp(rawIp || "unknown-ip")}`;
   return checkRateLimit(key, LOGIN_RATE_LIMIT, LOGIN_WINDOW_MS);
+}
+
+export function checkVerifyRateLimit(rawIp: string) {
+  const key = `verify:${hashClientIp(rawIp || "unknown-ip")}`;
+  return checkRateLimit(key, VERIFY_RATE_LIMIT, VERIFY_WINDOW_MS);
 }
 
 export function hashOtp(code: string): string {

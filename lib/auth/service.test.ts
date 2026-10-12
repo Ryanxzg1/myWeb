@@ -44,4 +44,20 @@ describe("lib/auth/service (core hashing logic)", () => {
     const blocked = checkLoginRateLimit(testIp);
     expect(blocked.allowed).toBe(false);
   });
+
+  it("keeps verify rate limit namespace independent from login (QE-02)", async () => {
+    const { checkLoginRateLimit, checkVerifyRateLimit } = await import(
+      "@/lib/auth/service"
+    );
+    const testIp = "192.168.1.77";
+
+    // Habiskan kuota login (5x)
+    for (let i = 0; i < 5; i++) {
+      checkLoginRateLimit(testIp);
+    }
+    expect(checkLoginRateLimit(testIp).allowed).toBe(false);
+
+    // Kuota verify harus tetap utuh karena memakai key terpisah
+    expect(checkVerifyRateLimit(testIp).allowed).toBe(true);
+  });
 });
