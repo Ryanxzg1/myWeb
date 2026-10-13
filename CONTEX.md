@@ -39,8 +39,8 @@ Dokumen yang belum ada (buat saat dibutuhkan): `docs/deployment.md`, `docs/api-c
 | Media | Cloudinary | 2.x |
 | Email | Resend | 6.x |
 | Anti-spam | Cloudflare Turnstile | — |
-| i18n | next-intl | 4.x |
-| Tema | next-themes | 0.4.x |
+| i18n | next-intl | 4.14.9 |
+| Tema | next-themes | 0.4.6 |
 | Validasi | zod | 4.x |
 | Rich text | Tiptap | 3.x |
 | Reorder | dnd-kit | 6.x / 10.x |
@@ -59,19 +59,30 @@ Alasan pemilihan ada di ADR-0001.
 | Fase 1 | Scaffold Next.js + wiring Prisma/Vercel/Cloudinary/Resend + token tema | ✅ selesai |
 | Fase 2 | Skema Prisma (9 tabel) + SQL migrasi + seed | ✅ selesai |
 | Fase 3 | Service logic: auth/OTP, session, email, kontak, rate limit, sanitasi | ✅ selesai |
-| Fase 4 | API Route Handlers (`/api/auth/*`, `/api/contact`) | ✅ selesai |
-| Fase 5 | i18n routing (`[locale]`) + wiring `next-themes` | ⬜ belum |
+| Fase 4 | API Route Handlers (`/api/auth/*`, `/api/contact`) + remediasi 8 temuan QE | ✅ selesai |
+| Fase 5 | i18n routing `[locale]` + `next-themes` (no-flash) + guard admin di `proxy.ts` | ✅ selesai |
 | Fase 6 | Implementasi UI publik & admin sesuai artboard | ⬜ belum |
 
 **Database belum terhubung.** `DATABASE_URL` di `.env.local` masih placeholder, jadi `prisma migrate` dan `seed` belum pernah dijalankan.
+
+**Halaman masih placeholder.** Fase 5 hanya memasang fondasi routing/tema. Isi halaman publik dan panel admin dibangun di Fase 6.
 
 ---
 
 ## 5. Verifikasi Terakhir
 
-- `npm test` → 9 suite, 44 test lulus
+- `npm test` → 11 suite, 58 test lulus
 - `npm run typecheck` → 0 error
 - `npm run build` → sukses
+- Smoke test dev server (Fase 5):
+  - `GET /` → 200, `<html lang="id">`, konten ID
+  - `GET /` + `Accept-Language: en` → 307 → `/en`
+  - `GET /en` → 200, `<html lang="en">`, konten EN
+  - `GET /admin` tanpa cookie sesi → 307 → `/admin/login?next=%2Fadmin`
+  - `GET /admin/login` → 200
+  - `GET /apa-saja` → 404 (validasi locale runtime)
+  - `GET /foo/bar` → 404 (`global-not-found`)
+  - Inline script anti-flash next-themes ada di `<head>`
 
 Jalankan ketiganya sebelum menandai pekerjaan selesai.
 
@@ -81,21 +92,42 @@ Jalankan ketiganya sebelum menandai pekerjaan selesai.
 
 ```
 app/
-  [locale]/                 # publik (belum diisi)
-  admin/                    # panel admin (belum diisi)
+  [locale]/                 # ROOT LAYOUT publik (bukan app/layout.tsx)
+    layout.tsx              # generateStaticParams, lang, hreflang, NextIntlClientProvider
+    page.tsx                # placeholder Fase 5
+    not-found.tsx           # 404 dalam konteks locale
+  admin/                    # ROOT LAYOUT kedua, di luar locale
+    layout.tsx              # shell admin (robots noindex)
+    page.tsx                # placeholder Fase 5 (butuh sesi)
+    login/page.tsx          # placeholder Fase 5 (dikecualikan dari guard)
+  global-not-found.tsx      # 404 untuk URL tak cocok route mana pun
   api/
     auth/login/route.ts     # POST login step 1 (kredensial + kirim OTP)
     auth/verify/route.ts    # POST login step 2 (verifikasi OTP + cookie session)
     auth/logout/route.ts    # POST logout (clear cookie session)
     contact/route.ts        # POST pesan kontak (Turnstile + honeypot + rate limit)
-  globals.css               # token tema
+  globals.css               # token tema (light/dark berbasis kelas `.dark`)
+proxy.ts                    # i18n routing + guard admin (optimistic)
+i18n/
+  routing.ts                # defineRouting + augmentasi Locale next-intl
+  request.ts                # getRequestConfig via next/root-params
+  navigation.ts             # Link/usePathname/useRouter sadar-locale
+messages/
+  id.json                   # pesan ID (placeholder Fase 5)
+  en.json                   # pesan EN (placeholder Fase 5)
+components/
+  shell/root-shell.tsx      # <html>/<body>/font/ThemeProvider bersama 2 root layout
+  theme/theme-provider.tsx  # next-themes, class-based, default system
+  theme/theme-toggle.tsx    # siklus terang -> gelap -> sistem
+  i18n/locale-switcher.tsx  # pindah bahasa di halaman yang sama
 lib/
   db.ts                     # Prisma client singleton + adapter pg
-  types.ts                  # Locale, Localized
+  types.ts                  # Locale, Localized, LOCALES, DEFAULT_LOCALE
   auth/password.ts          # hash/verify scrypt (stdlib)
   auth/temp-token.ts        # temporary HMAC token Step 1 -> Step 2 + maskEmail
   auth/session.ts           # signed session token HMAC-SHA256
-  auth/service.ts           # kredensial, OTP, rate limit login
+  auth/service.ts           # kredensial, OTP, rate limit login & verify
+  auth/admin-path.ts        # sumber kebenaran path panel admin
   email/resend.ts           # OTP + notifikasi kontak (escape HTML)
   contact/service.ts        # validasi zod, Turnstile, honeypot, simpan, rate limit
   content/sanitizer.ts      # sanitasi rich text + revalidateTag
@@ -118,9 +150,21 @@ Aturan ini spesifik untuk versi yang terpasang — berbeda dari Next.js/Prisma p
 **Next.js 16:**
 - `cacheComponents: true` dan `partialPrefetching: true` aktif. Model cache memakai direktif `use cache` / `cacheLife` / `cacheTag` — bukan cache `fetch` lama.
 - `revalidateTag(tag, profile)` **wajib dua argumen** (mis. `revalidateTag(tag, "max")`). Satu argumen memicu deprecation warning.
-- Middleware bernama **`proxy.ts`**, bukan `middleware.ts`.
+- Middleware bernama **`proxy.ts`**, bukan `middleware.ts`. Runtime default-nya Node.js.
 - Route props bertipe: `PageProps<'/route'>` dan `LayoutProps<'/'>`.
+- `dynamicParams = false` **tidak kompatibel** dengan Cache Components. Validasi locale dilakukan runtime di `i18n/request.ts` lewat `notFound()`.
+- `generateStaticParams` **wajib** di root layout `[locale]`, kalau tidak build gagal.
+- `app/layout.tsx` **tidak boleh ada**. Root layout ada di `app/[locale]/layout.tsx` dan `app/admin/layout.tsx`; dua-duanya wajib mendefinisikan `<html>`/`<body>` (diekstrak ke `RootShell`).
 - Tailwind v4 memakai token CSS-first (`@theme`) di `app/globals.css`; tidak ada `tailwind.config.js`.
+
+**next-intl 4:**
+- Locale dibaca lewat **`next/root-params`**, bukan `requestLocale` (deprecated) atau `setRequestLocale` (legacy).
+- Plugin resmi `next-intl/plugin` **tidak dipakai**. Sebagai gantinya alias `next-intl/config` → `./i18n/request.ts` dipasang manual di `next.config.ts` (`turbopack.resolveAlias`). Lihat bagian 11.
+- `next/root-params` belum didukung di Route Handler dan Server Action. Kalau butuh terjemahan di sana, oper `locale` eksplisit ke `getTranslations({ locale })`.
+
+**next-themes 0.4:**
+- Tema berbasis kelas `.dark` di `<html>`, bukan media query OS. Varian Tailwind `dark:` diarahkan ulang lewat `@custom-variant dark (&:where(.dark, .dark *))` di `app/globals.css`.
+- `<html>` wajib punya `suppressHydrationWarning` (sudah ada di `RootShell`).
 
 **Prisma 7:**
 - **Driver adapter wajib.** Client harus diinisialisasi dengan `PrismaPg`, bukan tanpa adapter.
@@ -137,6 +181,8 @@ Aturan ini spesifik untuk versi yang terpasang — berbeda dari Next.js/Prisma p
 - Ekstraksi IP klien wajib lewat `lib/security/ip.ts`, bukan baca header `x-forwarded-for` langsung.
 - Rate limiter wajib punya namespace key per alur (mis. `login:` vs `verify:`), jangan berbagi pool.
 - Status HTTP error ditentukan dari `errorCode` machine-readable, bukan dari pencocokan string pesan error.
+- **Guard di `proxy.ts` hanya optimistic check.** Setiap Server Component dan Server Action di bawah `/admin` WAJIB memverifikasi sesi sendiri sebelum membaca atau menulis data. Jangan pernah mengandalkan proxy sebagai satu-satunya penjaga.
+- Path panel admin diambil dari `lib/auth/admin-path.ts`, jangan menulis `/admin` literal di tempat lain.
 
 ---
 
@@ -160,14 +206,41 @@ npm run db:studio    # prisma studio
 
 Salin `.env.example` → `.env.local`. Semua rahasia lewat environment variable, tidak ada yang di-commit.
 
-`DATABASE_URL`, `AUTH_SECRET`, `ADMIN_EMAIL`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`.
+`DATABASE_URL`, `AUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PATH` (opsional), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`.
 
 Catatan dev: jika `RESEND_API_KEY` kosong, kode OTP dicetak ke terminal, bukan dikirim email.
+
+Catatan dev: jika `AUTH_SECRET` kosong atau kurang dari 32 karakter, `proxy.ts` menelan error-nya dan mengalihkan semua request `/admin` ke halaman login. Ini perilaku yang disengaja, bukan bug.
 
 ---
 
 ## 10. Langkah Berikutnya
 
-1. **Fase 5** — Routing `[locale]` (next-intl) + wiring `next-themes` (no-flash) + proxy auth middleware.
-2. **Fase 6** — Implementasi UI publik & admin mengikuti `docs/generated-uiux/`, dengan temuan di `docs/design-review.md` sebagai catatan yang belum diperbaiki.
-3. Isi kredensial asli (Neon, Cloudinary, Resend, Turnstile) lalu `db:migrate` + `db:seed`.
+1. **Fase 6** — Implementasi UI publik & admin mengikuti `docs/generated-uiux/`, dengan temuan di `docs/design-review.md` sebagai koreksi yang menang jika bertentangan.
+2. Isi kredensial asli (Neon, Cloudinary, Resend, Turnstile) lalu `db:migrate` + `db:seed`.
+3. Dokumentasi tertunda: `docs/deployment.md`, `docs/api-contracts.md`.
+
+---
+
+## 11. Kendala Environment yang Diketahui
+
+**`@swc/core` gagal memuat native binding di mesin ini.**
+
+```
+SWC native addon: validate cache root /home/ryan/.cache:
+cache root has a parent writable by another user without trusted sticky protection
+```
+
+Penyebab: `/home/ryan/.cache` bermode `drwxrwxr-x` (group-writable). SWC menolak mematerialisasi binding-nya di bawah direktori seperti itu.
+
+Dampak: setiap tool yang memuat `@swc/core` akan gagal — termasuk `next-intl/plugin`, karena `@swc/core` adalah dependensi langsung next-intl.
+
+Mitigasi yang sudah diterapkan: plugin next-intl tidak dipakai, alias `next-intl/config` dipasang manual di `next.config.ts`. Jalur build saat ini tidak menyentuh `@swc/core`.
+
+Perbaikan tuntas (opsional, di luar repo):
+
+```bash
+chmod 755 /home/ryan/.cache
+```
+
+Kalau nanti memakai fitur message extraction next-intl (`experimental.extract` / `experimental.messages`), plugin resmi kembali diperlukan dan izin cache di atas harus dibereskan lebih dulu.

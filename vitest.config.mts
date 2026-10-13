@@ -16,10 +16,22 @@ export default defineConfig({
         process.env.AUTH_SECRET ||
         "super-secret-test-key-at-least-32-chars-long",
     },
+    server: {
+      deps: {
+        // next-intl dikirim sebagai ESM yang mengimpor `next/server` tanpa
+        // ekstensi. Node tidak bisa me-resolve-nya karena paket `next` tidak
+        // punya exports map. Inline agar Vite yang menangani resolusi.
+        inline: [/next-intl/, /use-intl/],
+      },
+    },
   },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./"),
+      "next/server": path.resolve(
+        import.meta.dirname,
+        "node_modules/next/server.js",
+      ),
     },
   },
 });

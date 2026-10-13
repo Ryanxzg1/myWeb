@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "title": "Portfolio",
+    "description": "Bilingual personal portfolio: profile, experience, projects, and contact."
+  },
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "projects": "Projects",
+    "contact": "Contact"
+  },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "localeSwitcher": {
+    "label": "Select language",
+    "id": "ID",
+    "en": "EN"
+  },
+  "home": {
+    "phaseLabel": "Phase 5",
+    "title": "i18n and theme foundation is live",
+    "body": "Bilingual routing, locale detection, and flash-free theming are working. Page content lands in Phase 6."
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "The address you opened does not exist or has been moved.",
+    "back": "Back to home"
+  }
+}

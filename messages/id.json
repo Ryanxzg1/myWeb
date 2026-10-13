@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "title": "Portofolio",
+    "description": "Portofolio pribadi dwibahasa: profil, pengalaman, project, dan kontak."
+  },
+  "nav": {
+    "home": "Beranda",
+    "about": "Tentang",
+    "projects": "Project",
+    "contact": "Kontak"
+  },
+  "theme": {
+    "label": "Tema",
+    "light": "Terang",
+    "dark": "Gelap",
+    "system": "Sistem"
+  },
+  "localeSwitcher": {
+    "label": "Pilih bahasa",
+    "id": "ID",
+    "en": "EN"
+  },
+  "home": {
+    "phaseLabel": "Fase 5",
+    "title": "Fondasi i18n dan tema aktif",
+    "body": "Routing dwibahasa, deteksi locale, dan anti-flash tema sudah berjalan. Isi halaman diisi pada Fase 6."
+  },
+  "notFound": {
+    "title": "Halaman tidak ditemukan",
+    "body": "Alamat yang kamu buka tidak ada atau sudah dipindahkan.",
+    "back": "Kembali ke beranda"
+  }
+}

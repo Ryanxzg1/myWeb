@@ -21,6 +21,9 @@ describe("Auth API Routes", () => {
       remaining: 10,
       resetAt: Date.now() + 60000,
     });
+    // Efek samping housekeeping, bukan subjek pengujian. Tanpa mock ini, jalur
+    // sukses memanggil Prisma sungguhan dan menggantung sampai testTimeout.
+    vi.spyOn(authService, "cleanupExpiredCodes").mockResolvedValue({ count: 0 });
   });
 
   describe("POST /api/auth/login", () => {

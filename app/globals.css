@@ -1,10 +1,17 @@
 @import "tailwindcss";
 
+/* Dark mode dikendalikan kelas `.dark` yang ditulis next-themes, bukan media
+   query OS langsung. Ini yang membuat pilihan manual pengguna bisa menimpa
+   preferensi OS. Tailwind v4 default-nya `prefers-color-scheme`, jadi varian
+   `dark:` perlu diarahkan ulang ke kelas. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Token desain (PRD bagian 11): off-white hangat / near-black, satu aksen oranye. */
 :root {
   --background: #faf8f5;
   --foreground: #1a1a1a;
   --accent: #e8590c;
+  color-scheme: light;
 }
 
 @theme inline {
@@ -15,12 +22,11 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #d4d4d4;
-    --accent: #ff7a1a;
-  }
+.dark {
+  --background: #0a0a0a;
+  --foreground: #d4d4d4;
+  --accent: #ff7a1a;
+  color-scheme: dark;
 }
 
 body {
