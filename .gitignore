@@ -32,6 +32,10 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Pengecualian: template env wajib ikut repo — isinya sengaja tanpa nilai asli.
+# Tanpa baris ini, `.env*` ikut menelan `.env.example` dan daftar variabel yang
+# dibutuhkan proyek tidak pernah sampai ke orang yang meng-clone.
+!.env.example
 
 # vercel
 .vercel
