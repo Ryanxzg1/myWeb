@@ -28,7 +28,7 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!isAdminPath(pathname)) {
-    return handleI18nRouting(request);
+    return withLocaleCacheHeaders(request, pathname);
   }
 
   if (isAdminLoginPath(pathname)) {
@@ -49,6 +49,42 @@ export function proxy(request: NextRequest) {
 }
 
 /**
+ * Menjalankan routing i18n lalu menandai respons yang isinya bergantung pada
+ * header permintaan agar tidak masuk cache bersama.
+ *
+ * Path tanpa prefix locale (mis. `/`) ditentukan oleh cookie `NEXT_LOCALE` dan
+ * header `Accept-Language` — lihat `localeDetection` di `i18n/routing.ts`.
+ * Tanpa penandaan ini, respons 200 hasil rewrite ke `/id` tetap membawa
+ * `Cache-Control: s-maxage=...` dari halaman statis, sehingga cache bersama
+ * bisa menyajikan HTML versi ID lengkap dengan `Set-Cookie: NEXT_LOCALE=id`
+ * kepada pengunjung berbahasa Inggris dan memakunya ke ID.
+ *
+ * `no-store` dipakai sebagai ganti `Vary: Accept-Language` karena Next.js
+ * menimpa header `Vary` yang disetel di sini saat menyusun respons akhir
+ * (terverifikasi: nilainya hilang di respons `/`). Selama responsnya tidak
+ * disimpan cache mana pun, deklarasi varian tidak lagi relevan.
+ *
+ * Path yang sudah berprefix locale bersifat deterministik per URL, jadi
+ * caching-nya dibiarkan seperti semula.
+ */
+function withLocaleCacheHeaders(request: NextRequest, pathname: string) {
+  const response = handleI18nRouting(request);
+
+  if (!hasLocalePrefix(pathname)) {
+    response.headers.set("Cache-Control", "private, no-store");
+  }
+
+  return response;
+}
+
+/** `true` kalau segmen pertama pathname adalah salah satu locale yang didukung. */
+function hasLocalePrefix(pathname: string): boolean {
+  return routing.locales.some(
+    (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`),
+  );
+}
+
+/**
  * `verifySessionToken` melempar error kalau `AUTH_SECRET` absen atau terlalu
  * pendek. Tanpa penjagaan ini, setiap request admin akan berakhir 500 alih-alih
  * dialihkan ke halaman login.
@@ -64,6 +100,20 @@ function isSessionTokenValid(token: string | undefined): boolean {
 }
 
 export const config = {
-  // Lewati API, aset internal Next.js, dan path berisi titik (mis. favicon.ico).
-  matcher: ["/((?!api|trpc|_next|_vercel|.*\\..*).*)"],
+  // Dua pola, bukan satu: pola pertama menjaga `/admin` secara utuh, pola kedua
+  // melewati API, aset internal Next.js, dan path berisi titik (mis.
+  // favicon.ico).
+  //
+  // Sebelumnya pengecualian `.*\..*` ikut berlaku untuk `/admin`, sehingga
+  // `/admin/x.y` tidak pernah masuk ke guard dan berakhir 404 alih-alih
+  // dialihkan ke login. Pola pertama tidak memakai pengecualian itu.
+  //
+  // Catatan: pola pertama masih terikat pada path `admin` literal karena
+  // matcher bersifat statis. Kalau `ADMIN_PATH` diganti lewat env, guard tetap
+  // bekerja lewat pola kedua (path itu tidak cocok dengan daftar pengecualian),
+  // tapi kembali rentan terhadap pengecualian titik.
+  matcher: [
+    "/admin/:path*",
+    "/((?!api|trpc|_next|_vercel|admin|.*\\..*).*)",
+  ],
 };

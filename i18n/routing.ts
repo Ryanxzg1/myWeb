@@ -22,5 +22,9 @@ export const routing = defineRouting({
 declare module "next-intl" {
   interface AppConfig {
     Locale: (typeof routing.locales)[number];
+    // Katalog ID dipakai sebagai bentuk kanonik. Dengan ini `useTranslations()`
+    // dan `getTranslations()` menolak key yang tidak ada saat typecheck, bukan
+    // saat runtime. Paritas key ID/EN dijaga test di `i18n/routing.test.ts`.
+    Messages: typeof import("../messages/id.json");
   }
 }

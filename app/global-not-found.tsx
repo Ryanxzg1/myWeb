@@ -15,7 +15,9 @@ export const metadata: Metadata = {
  * melewati seluruh layout aplikasi, jadi ia mengimpor style dan font sendiri.
  *
  * next-intl tidak bisa dipakai di sini karena tidak ada konteks locale, jadi
- * teksnya ditulis dwibahasa langsung.
+ * teksnya ditulis dwibahasa langsung. Elemen html memakai locale default (id),
+ * dan setiap fragmen berbahasa Inggris ditandai `lang="en"` supaya pembaca
+ * layar memakai pelafalan yang benar.
  */
 export default function GlobalNotFound() {
   return (
@@ -28,13 +30,15 @@ export default function GlobalNotFound() {
           Halaman tidak ditemukan
         </h1>
         <p className="max-w-xl text-base leading-7 text-foreground/70">
-          Page not found. Alamat yang kamu buka tidak ada atau sudah dipindahkan.
+          <span lang="en">Page not found.</span> Alamat yang kamu buka tidak ada
+          atau sudah dipindahkan.
         </p>
         <a
           href="/"
           className="w-fit font-mono text-xs uppercase tracking-wider text-accent underline underline-offset-4"
         >
-          Kembali ke beranda / Back to home
+          <span lang="id">Kembali ke beranda</span> /{" "}
+          <span lang="en">Back to home</span>
         </a>
       </main>
     </RootShell>

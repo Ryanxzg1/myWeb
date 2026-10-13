@@ -61,6 +61,7 @@ Alasan pemilihan ada di ADR-0001.
 | Fase 3 | Service logic: auth/OTP, session, email, kontak, rate limit, sanitasi | ✅ selesai |
 | Fase 4 | API Route Handlers (`/api/auth/*`, `/api/contact`) + remediasi 8 temuan QE | ✅ selesai |
 | Fase 5 | i18n routing `[locale]` + `next-themes` (no-flash) + guard admin di `proxy.ts` | ✅ selesai |
+| Fase 5b | Remediasi temuan QC Fase 5 yang tervalidasi (cache, guard, kontras, regression guard) | ✅ selesai |
 | Fase 6 | Implementasi UI publik & admin sesuai artboard | ⬜ belum |
 
 **Database belum terhubung.** `DATABASE_URL` di `.env.local` masih placeholder, jadi `prisma migrate` dan `seed` belum pernah dijalankan.
@@ -71,7 +72,7 @@ Alasan pemilihan ada di ADR-0001.
 
 ## 5. Verifikasi Terakhir
 
-- `npm test` → 11 suite, 58 test lulus
+- `npm test` → 13 suite, 72 test lulus
 - `npm run typecheck` → 0 error
 - `npm run build` → sukses
 - Smoke test dev server (Fase 5):
@@ -83,6 +84,13 @@ Alasan pemilihan ada di ADR-0001.
   - `GET /apa-saja` → 404 (validasi locale runtime)
   - `GET /foo/bar` → 404 (`global-not-found`)
   - Inline script anti-flash next-themes ada di `<head>`
+- Smoke test produksi (`next start`, remediasi Fase 5b):
+  - `GET /` → 200, `Cache-Control: private, no-store` (sebelumnya `s-maxage=31536000`)
+  - `GET /en` → 200, `Cache-Control: s-maxage=31536000` (tetap cacheable, deterministik per URL)
+  - `GET /admin` → 307 ke login + `Cache-Control: private, no-store, max-age=0, must-revalidate`
+  - `GET /admin/login` → 200 + `Cache-Control: private, no-store, max-age=0, must-revalidate`
+  - `GET /admin/x.y` → 307 ke login (sebelumnya 404 karena proxy dilewati matcher)
+  - hreflang di HTML kini absolut (`http://localhost:3000/`, `/en`) berkat `metadataBase`
 
 Jalankan ketiganya sebelum menandai pekerjaan selesai.
 
@@ -107,10 +115,14 @@ app/
     auth/logout/route.ts    # POST logout (clear cookie session)
     contact/route.ts        # POST pesan kontak (Turnstile + honeypot + rate limit)
   globals.css               # token tema (light/dark berbasis kelas `.dark`)
-proxy.ts                    # i18n routing + guard admin (optimistic)
+proxy.ts                    # i18n routing + guard admin (optimistic) + no-store untuk path tanpa prefix
+vitest.setup.ts             # penjaga test: akses Prisma langsung gagal
+vitest.setup.test.ts        # memverifikasi penjaga itu benar-benar aktif
 i18n/
-  routing.ts                # defineRouting + augmentasi Locale next-intl
-  request.ts                # getRequestConfig via next/root-params
+  routing.ts                # defineRouting + augmentasi Locale & Messages next-intl
+  request.ts                # getRequestConfig via next/root-params + resolveMessages (diekspor untuk test)
+  routing.test.ts           # konfigurasi + paritas katalog pesan ID/EN
+  request.test.ts           # resolveMessages: locale valid / invalid / berbahaya
   navigation.ts             # Link/usePathname/useRouter sadar-locale
 messages/
   id.json                   # pesan ID (placeholder Fase 5)
@@ -183,6 +195,16 @@ Aturan ini spesifik untuk versi yang terpasang — berbeda dari Next.js/Prisma p
 - Status HTTP error ditentukan dari `errorCode` machine-readable, bukan dari pencocokan string pesan error.
 - **Guard di `proxy.ts` hanya optimistic check.** Setiap Server Component dan Server Action di bawah `/admin` WAJIB memverifikasi sesi sendiri sebelum membaca atau menulis data. Jangan pernah mengandalkan proxy sebagai satu-satunya penjaga.
 - Path panel admin diambil dari `lib/auth/admin-path.ts`, jangan menulis `/admin` literal di tempat lain.
+- `ADMIN_PATH` divalidasi terhadap `^[a-z0-9][a-z0-9-]*$` saat boot. Nilai tidak valid menggagalkan start, bukan diam-diam jatuh ke default — salah jaga path jauh lebih berbahaya daripada gagal boot.
+- Pengecualian halaman publik admin ditulis eksplisit di `lib/auth/admin-path.ts`. `isAdminLoginPath` adalah exact match; jangan pakai `startsWith` untuk membebaskan path dari guard.
+- Parameter `?next=` wajib lewat `isSafeNextPath` sebelum dipakai redirect balik.
+- `/admin/*` dipaksa `Cache-Control: private, no-store` lewat `next.config.ts`. Jangan hapus: halaman admin masih diprerender statis, dan tanpa aturan itu Next melayaninya dengan `s-maxage` publik.
+- Header `Vary` yang disetel di `proxy.ts` **ditimpa** Next.js saat menyusun respons akhir (terverifikasi hilang di respons `/`). Untuk menandai respons yang bergantung pada header permintaan, pakai `Cache-Control`, bukan `Vary`.
+- Katalog pesan ID adalah bentuk kanonik (`Messages` di `i18n/routing.ts`). Paritas key ID/EN dijaga test di `i18n/routing.test.ts` — tambah key di kedua file sekaligus.
+- `metadataBase` diambil dari `NEXT_PUBLIC_SITE_URL`. Tanpa itu hreflang/canonical dikirim relatif dan tidak konsisten dengan header `Link`.
+- `next/root-params` hanya punya nilai di dalam segmen `[locale]`. Route di luar segmen itu (termasuk seluruh `/admin/*`) akan menghasilkan `undefined` dan berakhir di `notFound()`. Untuk terjemahan admin, suplai `messages` eksplisit ke `NextIntlClientProvider`.
+- Test dilarang menyentuh database sungguhan. `vitest.setup.ts` memasang Prisma yang langsung melempar; mock modul pemanggilnya kalau butuh menguji jalur data.
+- Presedensi meta title/description: pengaturan admin (FR-ADM-7) menang; `messages.metadata.*` hanya fallback. Jangan biarkan `messages` menimpa nilai yang sudah diisi admin.
 
 ---
 
@@ -206,7 +228,7 @@ npm run db:studio    # prisma studio
 
 Salin `.env.example` → `.env.local`. Semua rahasia lewat environment variable, tidak ada yang di-commit.
 
-`DATABASE_URL`, `AUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PATH` (opsional), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`.
+`DATABASE_URL`, `AUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PATH` (opsional), `NEXT_PUBLIC_SITE_URL` (domain publik untuk `metadataBase`; fallback lokal `http://localhost:3000`), `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `RESEND_API_KEY`, `MAIL_FROM`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`.
 
 Catatan dev: jika `RESEND_API_KEY` kosong, kode OTP dicetak ke terminal, bukan dikirim email.
 

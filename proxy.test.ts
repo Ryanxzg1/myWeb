@@ -6,6 +6,7 @@ import {
   ADMIN_LOGIN_PATH,
   isAdminLoginPath,
   isAdminPath,
+  isSafeNextPath,
 } from "@/lib/auth/admin-path";
 import { SESSION_COOKIE_NAME, createSessionToken } from "@/lib/auth/session";
 
@@ -32,6 +33,34 @@ describe("lib/auth/admin-path", () => {
     expect(isAdminLoginPath(ADMIN_LOGIN_PATH)).toBe(true);
     expect(isAdminPath(ADMIN_LOGIN_PATH)).toBe(true);
     expect(isAdminLoginPath(ADMIN_BASE)).toBe(false);
+  });
+
+  it("tidak membebaskan subtree di bawah halaman login", () => {
+    expect(isAdminLoginPath(`${ADMIN_LOGIN_PATH}/reset`)).toBe(false);
+    expect(isAdminLoginPath(`${ADMIN_LOGIN_PATH}/x`)).toBe(false);
+  });
+});
+
+describe("lib/auth/admin-path — validasi parameter ?next=", () => {
+  it("menerima path internal absolut", () => {
+    expect(isSafeNextPath(ADMIN_BASE)).toBe(true);
+    expect(isSafeNextPath(`${ADMIN_BASE}/projects?page=2`)).toBe(true);
+  });
+
+  it("menolak target yang keluar dari situs", () => {
+    expect(isSafeNextPath("https://jahat.example")).toBe(false);
+    expect(isSafeNextPath("//jahat.example")).toBe(false);
+    expect(isSafeNextPath("/\\jahat.example")).toBe(false);
+    expect(isSafeNextPath("/admin\nLocation: https://jahat.example")).toBe(
+      false,
+    );
+  });
+
+  it("menolak nilai kosong atau path relatif", () => {
+    expect(isSafeNextPath(undefined)).toBe(false);
+    expect(isSafeNextPath(null)).toBe(false);
+    expect(isSafeNextPath("")).toBe(false);
+    expect(isSafeNextPath("admin")).toBe(false);
   });
 });
 
@@ -91,15 +120,48 @@ describe("proxy — delegasi ke i18n routing", () => {
     expect(proxy(requestTo("/en/projects")).status).toBe(200);
   });
 
-  it("matcher melewati API, aset internal, dan path berisi titik", () => {
-    const [matcher] = config.matcher;
-    const re = new RegExp(`^${matcher}$`);
+  it("matcher admin tidak memakai pengecualian path bertitik", () => {
+    // Pola admin adalah path-to-regexp (`:path*`), bukan regex mentah. Yang
+    // penting: ia tidak lagi memakai pengecualian `.*\..*` yang dulu membuat
+    // `/admin/x.y` dilewati proxy dan berakhir 404.
+    const [adminMatcher, i18nMatcher] = config.matcher;
+
+    expect(adminMatcher).not.toContain("\\.");
+    expect(i18nMatcher).toContain(".*\\..*");
+  });
+
+  it("guard admin tetap berlaku pada path bertitik", () => {
+    expect(proxy(requestTo(`${ADMIN_BASE}/x.y`)).status).toBe(307);
+    expect(proxy(requestTo(`${ADMIN_BASE}/projects/my.project`)).status).toBe(
+      307,
+    );
+  });
+
+  it("matcher i18n melewati API, aset internal, dan admin", () => {
+    const [, i18nMatcher] = config.matcher;
+    const re = new RegExp(`^${i18nMatcher}$`);
 
     expect(re.test("/api/contact")).toBe(false);
     expect(re.test("/_next/static/chunk.js")).toBe(false);
     expect(re.test("/favicon.ico")).toBe(false);
+    // Admin sudah ditangani pola pertama; jangan diproses dua kali.
+    expect(re.test(ADMIN_BASE)).toBe(false);
 
     expect(re.test("/")).toBe(true);
-    expect(re.test(ADMIN_BASE)).toBe(true);
+    expect(re.test("/en/projects")).toBe(true);
+  });
+});
+
+describe("proxy — variasi cache locale", () => {
+  it("menandai path tanpa prefix locale sebagai tidak cacheable", () => {
+    const res = proxy(requestTo("/"));
+
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("membiarkan path berprefix locale tetap cacheable", () => {
+    const res = proxy(requestTo("/en/projects"));
+
+    expect(res.headers.get("cache-control") ?? "").not.toContain("no-store");
   });
 });

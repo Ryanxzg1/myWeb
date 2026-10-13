@@ -64,7 +64,7 @@ Catatan: blog tidak termasuk; menu blog mengarah ke web eksternal.
 - FR-PUB-4 Hanya konten berstatus published yang tampil. Draft diakses publik mengembalikan 404.
 - FR-PUB-5 Link blog menuju URL eksternal dari pengaturan umum, dibuka di tab baru.
 - FR-PUB-6 Halaman 404 dan error mengikuti gaya situs.
-- FR-PUB-7 Desktop-first, responsive sampai lebar 360px tanpa horizontal scroll.
+- FR-PUB-7 Desktop-first, responsive sampai lebar 320px tanpa horizontal scroll (ambang dirapatkan dari 360px agar sejalan dengan SOP audit UI/UX internal).
 - FR-PUB-8 Semua halaman publik dirender di server (SSR/SSG) sehingga konten tidak bergantung pada JavaScript.
 
 ### 6.2 Bahasa & Tema
@@ -221,6 +221,7 @@ Kelemahan pilihan: admin dibangun sendiri (beban lebih besar, hilang penghematan
 - Palet awal (boleh diganti): light off-white hangat dengan teks hampir hitam; dark mendekati hitam dengan teks abu terang; satu aksen oranye atau sejenis yang konsisten di kedua tema.
 - Font: satu display (karakter kuat) dan satu monospace, keduanya berlisensi terbuka dan self-hosted.
 - Prinsip: CTA kontak terlihat tanpa scroll, hierarki jelas untuk scan 30 detik, kontras AA.
+- Catatan 2026-10-12: aksen oranye awal `#E8590C` hanya mencapai kontras 3,38:1 di atas off-white, sedangkan label aksen dipakai pada ukuran 11-12px (butuh 4,5:1). Aksen tema terang digelapkan ke `#C2410C` (4,89:1). Tema gelap tetap `#FF7A1A` (7,59:1).
 
 ## 12. Acceptance Criteria
 
@@ -282,7 +283,7 @@ Desain UI harus siap paling lambat akhir minggu 2; ini dependensi terbesar timel
 2. Email provider: Resend diasumsikan; konfirmasi apakah domain pengirim bisa diverifikasi (SPF/DKIM) di Resend.
 3. Analytics diasumsikan Cloudflare Web Analytics; bisa dimatikan dari pengaturan.
 4. Struktur halaman diasumsikan satu halaman berseksi + halaman detail project.
-5. Bahasa default ID; tidak ada deteksi otomatis berdasarkan browser.
+5. Bahasa default ID. Deteksi otomatis berbasis browser **aktif** (Opsi A, diputuskan 2026-10-12): cookie `NEXT_LOCALE` menang lebih dulu, lalu header `Accept-Language`. Konsekuensinya path tanpa prefix locale tidak boleh masuk cache bersama — lihat `proxy.ts` dan ADR-0001 bagian 6.1.
 6. Identitas visual belum ada; usulan di bagian 11 menunggu persetujuan.
 7. Kode login via email sesuai permintaan; opsi TOTP (authenticator) di fase 1.5.
 8. Konten awal (bio, project, terjemahan EN) disiapkan pemilik.

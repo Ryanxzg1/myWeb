@@ -15,10 +15,21 @@ export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }));
 }
 
+/**
+ * Domain publik situs. Tanpa `metadataBase`, hreflang dan canonical dikirim
+ * sebagai URL relatif, sehingga HTML dan header `Link` tidak konsisten dan
+ * crawler bisa salah menyimpulkan versi bahasa mana yang kanonik.
+ *
+ * Fallback hanya berguna di lokal. Produksi WAJIB mengisi
+ * `NEXT_PUBLIC_SITE_URL` (lihat `.env.example`).
+ */
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("metadata");
 
   return {
+    metadataBase: new URL(SITE_URL),
     title: t("title"),
     description: t("description"),
     // hreflang antar bahasa (FR-I18N-4)

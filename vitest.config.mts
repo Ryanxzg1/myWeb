@@ -8,6 +8,8 @@ config({ path: ".env.local" });
 export default defineConfig({
   test: {
     environment: "node",
+    // Menjaga test agar tidak pernah menyentuh database sungguhan.
+    setupFiles: ["./vitest.setup.ts"],
     env: {
       DATABASE_URL:
         process.env.DATABASE_URL ||

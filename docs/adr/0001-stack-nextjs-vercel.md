@@ -3,6 +3,7 @@
 **Status:** Accepted
 **Tanggal:** 2026-10-10
 **Revisi:** 2026-10-10 — database diubah dari MongoDB Atlas (Mongoose) ke Neon Postgres (Prisma)
+**Revisi:** 2026-10-12 — deteksi locale otomatis diaktifkan (Opsi A) + penyesuaian token aksen tema terang untuk kontras AA (lihat bagian 6)
 **Penggagas:** Pemilik proyek
 
 ## 1. Konteks dan Masalah
@@ -70,6 +71,20 @@ Panel admin dibangun custom di dalam Next.js (Filament dibatalkan bersama Larave
 4. Definisikan skema Prisma + migrasi + index (cleanup kode kedaluwarsa via filter/Cron).
 5. Bangun auth admin (password + OTP email) → CRUD konten → UI publik → SEO → kontak.
 6. Deploy dan uji acceptance criteria PRD v2.0.
+
+## 6. Keputusan Lanjutan (2026-10-12)
+
+### 6.1 Deteksi locale otomatis — Opsi A (aktif)
+
+`i18n/routing.ts` memakai `localeDetection: true`. Urutan penentuan locale: cookie `NEXT_LOCALE` → header `Accept-Language` → locale default (id).
+
+- **Alternatif yang ditolak:** Opsi B (`localeDetection: false`, locale murni dari URL). Lebih sederhana untuk caching karena `/` menjadi deterministik, tapi kehilangan kenyamanan pengunjung berbahasa Inggris yang datang tanpa prefix.
+- **Konsekuensi yang diterima:** path tanpa prefix locale isinya bergantung pada header permintaan, jadi tidak boleh masuk cache bersama. `proxy.ts` menandainya `Cache-Control: private, no-store`; path berprefix (`/en`, `/id`) tetap `s-maxage`.
+- **Amendemen PRD:** asumsi #5 di PRD bagian 16 yang semula berbunyi "tidak ada deteksi otomatis berdasarkan browser" sudah diperbarui.
+
+### 6.2 Token aksen tema terang
+
+Aksen awal `#E8590C` hanya mencapai 3,38:1 di atas `#FAF8F5`, di bawah ambang WCAG AA (4,5:1) untuk teks normal — padahal label aksen dipakai pada 11-12px. Tema terang memakai `#C2410C` (4,89:1); tema gelap tidak berubah (`#FF7A1A` di atas `#0A0A0A` = 7,59:1). PRD bagian 11 sudah mencatat penyesuaian ini.
 
 ---
 

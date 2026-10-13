@@ -28,7 +28,7 @@ export function LocaleSwitcher() {
             locale={locale}
             aria-current={isActive ? "true" : undefined}
             className={`font-mono text-[11px] uppercase tracking-wider transition-colors hover:text-accent ${
-              isActive ? "text-accent" : "text-foreground/60"
+              isActive ? "text-accent" : "text-foreground/70"
             }`}
           >
             {t(locale)}

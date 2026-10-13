@@ -31,8 +31,14 @@ export default getRequestConfig(async ({ locale }) => {
  *
  * Ini juga pengganti `dynamicParams = false`, yang tidak kompatibel dengan
  * Cache Components: tanpa validasi, `/apa-saja` ikut cocok sebagai locale.
+ *
+ * CATATAN FASE 6: `next/root-params` hanya punya nilai di dalam segmen
+ * `[locale]`. Route di luar segmen itu — termasuk seluruh `/admin/*` — akan
+ * menghasilkan `undefined` dan berakhir di `notFound()`. Kalau panel admin
+ * butuh terjemahan, suplai pesannya secara eksplisit (mis. `messages` langsung
+ * ke `NextIntlClientProvider`), jangan mengandalkan root param.
  */
-async function resolveMessages(locale: unknown) {
+export async function resolveMessages(locale: unknown) {
   if (!hasLocale(routing.locales, locale)) {
     notFound();
   }

@@ -21,6 +21,24 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // Panel admin tidak boleh masuk cache bersama: responsnya bergantung
+        // pada cookie sesi. Tanpa aturan ini, halaman admin yang diprerender
+        // statis dilayani dengan `Cache-Control: s-maxage=...` seperti konten
+        // publik.
+        //
+        // Halaman admin belum dipaksa dinamis karena `cacheComponents` menolak
+        // data runtime di luar Suspense. Begitu Fase 6 membaca sesi di Server
+        // Component, route-nya menjadi dinamis dengan sendirinya; aturan ini
+        // tetap jadi penjaga lapis kedua yang tidak bergantung pada isi halaman.
+        source: "/admin/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "private, no-store, max-age=0, must-revalidate",
+          },
+        ],
+      },
+      {
         source: "/:path*",
         headers: [
           {
